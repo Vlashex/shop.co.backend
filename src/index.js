@@ -12,9 +12,6 @@ const {
   buildRepositories: buildMariaRepositories,
 } = require("./infrastructure/store/mariaStore");
 const {
-  buildRepositories: buildNeoRepositories,
-} = require("./infrastructure/store/neoStore");
-const {
   buildProductUseCases,
 } = require("./application/use-cases/products");
 const { buildUserUseCases } = require("./application/use-cases/users");
@@ -166,8 +163,6 @@ async function start() {
   let repositories;
   if (dbType === "mariadb") {
     repositories = await buildMariaRepositories();
-  } else if (dbType === "neo4j") {
-    repositories = await buildNeoRepositories();
   } else {
     repositories = await buildMongoRepositories();
   }
