@@ -1,9 +1,10 @@
 function buildAuthUseCases(
   { userRepository },
   hashService,
-  tokenService
+  tokenService,
+  refreshTokenService
 ) {
-  async function signUp(data) {
+  async function signUp(data, context = {}) {
     const existing = await userRepository.getByEmail(data.email);
     if (existing) {
       return {
@@ -12,38 +13,72 @@ function buildAuthUseCases(
       };
     }
 
-    const hashedPassword = hashService.isLikelyHashed(data.password)
-      ? data.password
-      : hashService.hash(data.password);
+    const hashedPassword = await hashService.hash(data.password);
 
     const user = await userRepository.create(data, hashedPassword);
     const tokens = tokenService.signTokens(user.id);
+    await refreshTokenService.persistIssuedRefresh(tokens.refresh_token, {
+      ip: context.ip,
+      userAgent: context.userAgent,
+    });
 
-    return { data: { user, tokens }, error: null };
+    return { data: { user, tokens: tokens }, error: null };
   }
 
-  async function signIn(data) {
+  async function signIn(data, context = {}) {
     const user = await userRepository.getByEmail(data.email);
     if (!user) {
       return { data: null, error: { statusCode: 401, message: "Invalid credentials" } };
     }
 
     const storedPassword = await userRepository.getPassword(user.id);
-    const candidate = hashService.isLikelyHashed(data.password)
-      ? data.password
-      : hashService.hash(data.password);
+    const matches = storedPassword
+      ? await hashService.verify(data.password, storedPassword)
+      : false;
 
-    if (!storedPassword || storedPassword !== candidate) {
+    if (!matches) {
       return { data: null, error: { statusCode: 401, message: "Invalid credentials" } };
     }
 
     const tokens = tokenService.signTokens(user.id);
+    await refreshTokenService.persistIssuedRefresh(tokens.refresh_token, {
+      ip: context.ip,
+      userAgent: context.userAgent,
+    });
     return { data: { user, tokens }, error: null };
+  }
+
+  async function refreshSession(refreshToken, context = {}) {
+    const result = await refreshTokenService.rotate(refreshToken, {
+      ip: context.ip,
+      userAgent: context.userAgent,
+    });
+
+    if (result.error) {
+      if (result.error.code === "TOKEN_EXPIRED") {
+        return { data: null, error: { statusCode: 401, message: "Refresh token expired" } };
+      }
+
+      if (result.error.code === "TOKEN_REUSE") {
+        return { data: null, error: { statusCode: 401, message: "Refresh token reuse detected" } };
+      }
+
+      return { data: null, error: { statusCode: 401, message: "Invalid refresh token" } };
+    }
+
+    return { data: result.data, error: null };
+  }
+
+  async function signOut(refreshToken) {
+    await refreshTokenService.revokeFromToken(refreshToken);
+    return { data: { success: true }, error: null };
   }
 
   return {
     signUp,
     signIn,
+    refreshSession,
+    signOut,
   };
 }
 

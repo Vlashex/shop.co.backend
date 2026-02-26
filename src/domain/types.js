@@ -7,10 +7,10 @@
 
 /**
  * @typedef {Object} User
- * @property {number} id
+ * @property {string} id
  * @property {string} email
  * @property {string} name
- * @property {number[]} cart
+ * @property {string[]} cart
  */
 
 /**
@@ -30,12 +30,16 @@
  * @property {string} title
  * @property {number} price
  * @property {number} rate
+ * @property {string} category
  * @property {string[]} images
+ * @property {string[]} [sizes]
+ * @property {string[]} [styles]
+ * @property {string[]} [colors]
  */
 
 /**
  * @typedef {Object} Product
- * @property {number} id
+ * @property {string} id
  * @property {string} title
  * @property {number} price
  * @property {number} previousPrice

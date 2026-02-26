@@ -1,3 +1,7 @@
+function isObjectIdLike(value) {
+  return typeof value === "string" && /^[a-fA-F0-9]{24}$/.test(value);
+}
+
 function buildUsersRoutes(userUseCases) {
   return [
     {
@@ -12,8 +16,8 @@ function buildUsersRoutes(userUseCases) {
       method: "GET",
       path: "/api/users/:id",
       handler: async ({ params }, res) => {
-        const id = parseInt(params.id, 10);
-        if (Number.isNaN(id)) {
+        const id = params.id;
+        if (!isObjectIdLike(id)) {
           return res.json(400, { error: "Invalid user ID" });
         }
 
@@ -42,8 +46,8 @@ function buildUsersRoutes(userUseCases) {
       method: "PUT",
       path: "/api/users/:id",
       handler: async ({ params, body }, res) => {
-        const id = parseInt(params.id, 10);
-        if (Number.isNaN(id)) {
+        const id = params.id;
+        if (!isObjectIdLike(id)) {
           return res.json(400, { error: "Invalid user ID" });
         }
 
@@ -59,8 +63,8 @@ function buildUsersRoutes(userUseCases) {
       method: "DELETE",
       path: "/api/users/:id",
       handler: async ({ params }, res) => {
-        const id = parseInt(params.id, 10);
-        if (Number.isNaN(id)) {
+        const id = params.id;
+        if (!isObjectIdLike(id)) {
           return res.json(400, { error: "Invalid user ID" });
         }
 

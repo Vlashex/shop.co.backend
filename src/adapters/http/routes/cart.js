@@ -1,3 +1,7 @@
+function isObjectIdLike(value) {
+  return typeof value === "string" && /^[a-fA-F0-9]{24}$/.test(value);
+}
+
 function buildCartRoutes(cartUseCases, tokenService) {
   function getUserId(headers) {
     const authHeader = headers.authorization;
@@ -33,14 +37,11 @@ function buildCartRoutes(cartUseCases, tokenService) {
         }
 
         const { productId } = body || {};
-        const parsed =
-          typeof productId === "string" ? parseInt(productId, 10) : productId;
-
-        if (Number.isNaN(parsed)) {
+        if (!isObjectIdLike(productId)) {
           return res.json(400, { error: "Invalid product ID" });
         }
 
-        const user = await cartUseCases.addItem(userId, parsed);
+        const user = await cartUseCases.addItem(userId, productId);
         if (!user) {
           return res.json(404, { error: "User not found" });
         }
@@ -58,8 +59,8 @@ function buildCartRoutes(cartUseCases, tokenService) {
         }
 
         const { productIds } = body || {};
-        if (!Array.isArray(productIds)) {
-          return res.json(400, { error: "productIds must be an array" });
+        if (!Array.isArray(productIds) || productIds.some((id) => !isObjectIdLike(id))) {
+          return res.json(400, { error: "productIds must be an array of ObjectId strings" });
         }
 
         const user = await cartUseCases.addItems(userId, productIds);
@@ -79,8 +80,8 @@ function buildCartRoutes(cartUseCases, tokenService) {
           return res.json(401, { error: "Invalid or missing token" });
         }
 
-        const productId = parseInt(params.productId, 10);
-        if (Number.isNaN(productId)) {
+        const productId = params.productId;
+        if (!isObjectIdLike(productId)) {
           return res.json(400, { error: "Invalid product ID" });
         }
 

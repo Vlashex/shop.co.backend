@@ -1,91 +1,252 @@
-const { createUser } = require("../../domain/entities");
+const { ObjectId } = require("mongodb");
 
-function buildMongoUserRepository(collection, nextId) {
-  const baseProjection = { _id: 0, passwordHash: 0 };
+function toObjectIdOrNull(value) {
+  if (typeof value !== "string" || !ObjectId.isValid(value)) {
+    return null;
+  }
+  return new ObjectId(value);
+}
+
+function mapUserDto(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    cart: Array.isArray(row.cart) ? row.cart : [],
+  };
+}
+
+function buildUserWithCartPipeline(match = {}) {
+  const pipeline = [];
+
+  if (Object.keys(match).length > 0) {
+    pipeline.push({ $match: match });
+  }
+
+  pipeline.push(
+    {
+      $lookup: {
+        from: "cart_items",
+        localField: "_id",
+        foreignField: "user_id",
+        as: "cart_items",
+      },
+    },
+    { $unwind: { path: "$cart_items", preserveNullAndEmptyArrays: true } },
+    {
+      $group: {
+        _id: "$_id",
+        email: { $first: "$email" },
+        name: { $first: "$name" },
+        cart: { $addToSet: "$cart_items.product_id" },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        id: { $toString: "$_id" },
+        email: 1,
+        name: 1,
+        cart: {
+          $filter: {
+            input: {
+              $map: {
+                input: "$cart",
+                as: "productId",
+                in: {
+                  $cond: [
+                    { $eq: ["$$productId", null] },
+                    null,
+                    { $toString: "$$productId" },
+                  ],
+                },
+              },
+            },
+            as: "productId",
+            cond: { $ne: ["$$productId", null] },
+          },
+        },
+      },
+    }
+  );
+
+  return pipeline;
+}
+
+function buildMongoUserRepository(collections) {
+  const { users, cartItems } = collections;
 
   async function getAll() {
-    return collection.find({}, { projection: baseProjection }).toArray();
+    const rows = await users.aggregate(buildUserWithCartPipeline()).toArray();
+    return rows.map(mapUserDto);
   }
 
   async function getById(id) {
-    return collection.findOne({ id }, { projection: baseProjection });
+    const objectId = toObjectIdOrNull(id);
+    if (!objectId) return null;
+
+    const rows = await users
+      .aggregate(buildUserWithCartPipeline({ _id: objectId }))
+      .toArray();
+
+    return mapUserDto(rows[0] || null);
   }
 
   async function getByEmail(email) {
-    return collection.findOne({ email }, { projection: baseProjection });
+    const rows = await users
+      .aggregate(buildUserWithCartPipeline({ email }))
+      .toArray();
+
+    return mapUserDto(rows[0] || null);
   }
 
   async function create(data, hashedPassword) {
-    const id = await nextId("users");
-    const user = createUser({ id, email: data.email, name: data.name });
-    await collection.insertOne({ ...user, passwordHash: hashedPassword });
-    return user;
+    const result = await users.insertOne({
+      email: data.email,
+      name: data.name,
+      password_hash: hashedPassword,
+    });
+
+    return {
+      id: result.insertedId.toString(),
+      email: data.email,
+      name: data.name,
+      cart: [],
+    };
   }
 
   async function update(id, data) {
-    const result = await collection.findOneAndUpdate(
-      { id },
-      { $set: data },
-      { returnDocument: "after", projection: baseProjection }
-    );
+    const objectId = toObjectIdOrNull(id);
+    if (!objectId) return null;
 
-    return result.value || null;
+    const updates = {};
+    if (data.email !== undefined) updates.email = data.email;
+    if (data.name !== undefined) updates.name = data.name;
+
+    if (Object.keys(updates).length > 0) {
+      await users.updateOne({ _id: objectId }, { $set: updates });
+    }
+
+    return getById(id);
   }
 
   async function remove(id) {
-    const result = await collection.deleteOne({ id });
-    return result.deletedCount === 1;
+    const objectId = toObjectIdOrNull(id);
+    if (!objectId) return false;
+
+    const [userResult] = await Promise.all([
+      users.deleteOne({ _id: objectId }),
+      cartItems.deleteMany({ user_id: objectId }),
+    ]);
+
+    return userResult.deletedCount === 1;
   }
 
   async function getPassword(userId) {
-    const doc = await collection.findOne(
-      { id: userId },
-      { projection: { passwordHash: 1 } }
+    const objectId = toObjectIdOrNull(userId);
+    if (!objectId) return undefined;
+
+    const doc = await users.findOne(
+      { _id: objectId },
+      { projection: { password_hash: 1 } }
     );
-    return doc ? doc.passwordHash : undefined;
+
+    return doc ? doc.password_hash : undefined;
   }
 
   async function setPassword(userId, hashedPassword) {
-    await collection.updateOne(
-      { id: userId },
-      { $set: { passwordHash: hashedPassword } }
+    const objectId = toObjectIdOrNull(userId);
+    if (!objectId) return;
+
+    await users.updateOne(
+      { _id: objectId },
+      { $set: { password_hash: hashedPassword } }
     );
   }
 
   async function addToCart(userId, productId) {
-    const result = await collection.findOneAndUpdate(
-      { id: userId },
-      { $addToSet: { cart: productId } },
-      { returnDocument: "after", projection: baseProjection }
+    const userObjectId = toObjectIdOrNull(userId);
+    const productObjectId = toObjectIdOrNull(productId);
+
+    if (!userObjectId || !productObjectId) return null;
+
+    const userExists = await users.findOne(
+      { _id: userObjectId },
+      { projection: { _id: 1 } }
     );
-    return result.value || null;
+    if (!userExists) return null;
+
+    await cartItems.updateOne(
+      { user_id: userObjectId, product_id: productObjectId },
+      { $inc: { quantity: 1 } },
+      { upsert: true }
+    );
+
+    return getById(userId);
   }
 
   async function addManyToCart(userId, productIds) {
-    const result = await collection.findOneAndUpdate(
-      { id: userId },
-      { $addToSet: { cart: { $each: productIds } } },
-      { returnDocument: "after", projection: baseProjection }
+    const userObjectId = toObjectIdOrNull(userId);
+    if (!userObjectId) return null;
+
+    const userExists = await users.findOne(
+      { _id: userObjectId },
+      { projection: { _id: 1 } }
     );
-    return result.value || null;
+    if (!userExists) return null;
+
+    const productObjectIds = (Array.isArray(productIds) ? productIds : [])
+      .map((id) => toObjectIdOrNull(id))
+      .filter((id) => id !== null);
+
+    if (productObjectIds.length > 0) {
+      await cartItems.bulkWrite(
+        productObjectIds.map((productObjectId) => ({
+          updateOne: {
+            filter: { user_id: userObjectId, product_id: productObjectId },
+            update: { $inc: { quantity: 1 } },
+            upsert: true,
+          },
+        }))
+      );
+    }
+
+    return getById(userId);
   }
 
   async function removeFromCart(userId, productId) {
-    const result = await collection.findOneAndUpdate(
-      { id: userId },
-      { $pull: { cart: productId } },
-      { returnDocument: "after", projection: baseProjection }
+    const userObjectId = toObjectIdOrNull(userId);
+    const productObjectId = toObjectIdOrNull(productId);
+
+    if (!userObjectId || !productObjectId) return null;
+
+    const userExists = await users.findOne(
+      { _id: userObjectId },
+      { projection: { _id: 1 } }
     );
-    return result.value || null;
+    if (!userExists) return null;
+
+    await cartItems.deleteOne({
+      user_id: userObjectId,
+      product_id: productObjectId,
+    });
+
+    return getById(userId);
   }
 
   async function clearCart(userId) {
-    const result = await collection.findOneAndUpdate(
-      { id: userId },
-      { $set: { cart: [] } },
-      { returnDocument: "after", projection: baseProjection }
+    const userObjectId = toObjectIdOrNull(userId);
+    if (!userObjectId) return null;
+
+    const userExists = await users.findOne(
+      { _id: userObjectId },
+      { projection: { _id: 1 } }
     );
-    return result.value || null;
+    if (!userExists) return null;
+
+    await cartItems.deleteMany({ user_id: userObjectId });
+    return getById(userId);
   }
 
   return {
@@ -101,6 +262,7 @@ function buildMongoUserRepository(collection, nextId) {
     addManyToCart,
     removeFromCart,
     clearCart,
+    buildUserWithCartPipeline,
   };
 }
 

@@ -12,10 +12,12 @@
     "start:dist": "node dist/index.js"
   },
   "dependencies": {
+    "argon2": "^0.44.0",
     "dotenv": "^16.4.5",
     "jsonwebtoken": "^9.0.2",
     "mariadb": "^3.3.3",
     "mongodb": "^6.14.2",
-    "neo4j-driver": "^5.27.0"
+    "p-limit": "^7.3.0",
+    "redis": "^5.8.2"
   }
 }
