@@ -124,7 +124,10 @@ function buildAuthRoutes(authUseCases) {
         }
 
         setRefreshCookie(res, result.data.refresh_token);
-        return res.json(200, { access_token: result.data.access_token });
+        return res.json(200, {
+          access_token: result.data.access_token,
+          refresh_token: result.data.refresh_token,
+        });
       },
     },
     {
