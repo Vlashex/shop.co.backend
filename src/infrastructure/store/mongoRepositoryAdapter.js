@@ -3,11 +3,7 @@ const {
   COLLECTION_NAMES,
 } = require("../../app/buildMongoRepositories");
 
-async function buildRepositories() {
-  return buildMongoRepositories();
-}
-
 module.exports = {
-  buildRepositories,
+  buildMongoRepositories,
   COLLECTION_NAMES,
 };

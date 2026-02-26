@@ -1,84 +1,12 @@
-const { ObjectId } = require("mongodb");
+const { buildUserWithCartPipeline } = require("../../../domain/user/buildUserWithCartPipeline");
+const { mapUserDto } = require("../../../domain/user/mapUserDto");
+const { toObjectIdOrNull } = require("../objectId");
 
-function toObjectIdOrNull(value) {
-  if (typeof value !== "string" || !ObjectId.isValid(value)) {
-    return null;
-  }
-  return new ObjectId(value);
-}
-
-function mapUserDto(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    email: row.email,
-    name: row.name,
-    cart: Array.isArray(row.cart) ? row.cart : [],
-  };
-}
-
-function buildUserWithCartPipeline(match = {}) {
-  const pipeline = [];
-
-  if (Object.keys(match).length > 0) {
-    pipeline.push({ $match: match });
-  }
-
-  pipeline.push(
-    {
-      $lookup: {
-        from: "cart_items",
-        localField: "_id",
-        foreignField: "user_id",
-        as: "cart_items",
-      },
-    },
-    { $unwind: { path: "$cart_items", preserveNullAndEmptyArrays: true } },
-    {
-      $group: {
-        _id: "$_id",
-        email: { $first: "$email" },
-        name: { $first: "$name" },
-        cart: { $addToSet: "$cart_items.product_id" },
-      },
-    },
-    {
-      $project: {
-        _id: 0,
-        id: { $toString: "$_id" },
-        email: 1,
-        name: 1,
-        cart: {
-          $filter: {
-            input: {
-              $map: {
-                input: "$cart",
-                as: "productId",
-                in: {
-                  $cond: [
-                    { $eq: ["$$productId", null] },
-                    null,
-                    { $toString: "$$productId" },
-                  ],
-                },
-              },
-            },
-            as: "productId",
-            cond: { $ne: ["$$productId", null] },
-          },
-        },
-      },
-    }
-  );
-
-  return pipeline;
-}
-
-function buildMongoUserRepository(collections) {
+function buildMongoUserRepository(collections, collectionNames) {
   const { users, cartItems } = collections;
 
   async function getAll() {
-    const rows = await users.aggregate(buildUserWithCartPipeline()).toArray();
+    const rows = await users.aggregate(buildUserWithCartPipeline(collectionNames)).toArray();
     return rows.map(mapUserDto);
   }
 
@@ -87,7 +15,7 @@ function buildMongoUserRepository(collections) {
     if (!objectId) return null;
 
     const rows = await users
-      .aggregate(buildUserWithCartPipeline({ _id: objectId }))
+      .aggregate(buildUserWithCartPipeline(collectionNames, { _id: objectId }))
       .toArray();
 
     return mapUserDto(rows[0] || null);
@@ -95,7 +23,7 @@ function buildMongoUserRepository(collections) {
 
   async function getByEmail(email) {
     const rows = await users
-      .aggregate(buildUserWithCartPipeline({ email }))
+      .aggregate(buildUserWithCartPipeline(collectionNames, { email }))
       .toArray();
 
     return mapUserDto(rows[0] || null);
@@ -171,10 +99,7 @@ function buildMongoUserRepository(collections) {
 
     if (!userObjectId || !productObjectId) return null;
 
-    const userExists = await users.findOne(
-      { _id: userObjectId },
-      { projection: { _id: 1 } }
-    );
+    const userExists = await users.findOne({ _id: userObjectId }, { projection: { _id: 1 } });
     if (!userExists) return null;
 
     await cartItems.updateOne(
@@ -190,10 +115,7 @@ function buildMongoUserRepository(collections) {
     const userObjectId = toObjectIdOrNull(userId);
     if (!userObjectId) return null;
 
-    const userExists = await users.findOne(
-      { _id: userObjectId },
-      { projection: { _id: 1 } }
-    );
+    const userExists = await users.findOne({ _id: userObjectId }, { projection: { _id: 1 } });
     if (!userExists) return null;
 
     const productObjectIds = (Array.isArray(productIds) ? productIds : [])
@@ -221,16 +143,10 @@ function buildMongoUserRepository(collections) {
 
     if (!userObjectId || !productObjectId) return null;
 
-    const userExists = await users.findOne(
-      { _id: userObjectId },
-      { projection: { _id: 1 } }
-    );
+    const userExists = await users.findOne({ _id: userObjectId }, { projection: { _id: 1 } });
     if (!userExists) return null;
 
-    await cartItems.deleteOne({
-      user_id: userObjectId,
-      product_id: productObjectId,
-    });
+    await cartItems.deleteOne({ user_id: userObjectId, product_id: productObjectId });
 
     return getById(userId);
   }
@@ -239,10 +155,7 @@ function buildMongoUserRepository(collections) {
     const userObjectId = toObjectIdOrNull(userId);
     if (!userObjectId) return null;
 
-    const userExists = await users.findOne(
-      { _id: userObjectId },
-      { projection: { _id: 1 } }
-    );
+    const userExists = await users.findOne({ _id: userObjectId }, { projection: { _id: 1 } });
     if (!userExists) return null;
 
     await cartItems.deleteMany({ user_id: userObjectId });
@@ -262,7 +175,7 @@ function buildMongoUserRepository(collections) {
     addManyToCart,
     removeFromCart,
     clearCart,
-    buildUserWithCartPipeline,
+    buildUserWithCartPipeline: (match = {}) => buildUserWithCartPipeline(collectionNames, match),
   };
 }
 
