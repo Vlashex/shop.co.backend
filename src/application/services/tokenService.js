@@ -1,6 +1,5 @@
-const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const { AbstractCursor } = require("mongodb");
+const jwt = require("jsonwebtoken");
 
 const ACCESS_TTL_SECONDS = 15 * 60;
 const REFRESH_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -30,17 +29,13 @@ function buildTokenService() {
     const subject = String(userId);
     const header = { alg: ALGORITHM, typ: "JWT", kid: keyVersion };
 
-    const access_token = jwt.sign(
-      { sub: subject },
-      accessSecret,
-      {
-        algorithm: ALGORITHM,
-        issuer,
-        audience,
-        expiresIn: ACCESS_TTL_SECONDS,
-        header,
-      }
-    );
+    const access_token = jwt.sign({ sub: subject }, accessSecret, {
+      algorithm: ALGORITHM,
+      issuer,
+      audience,
+      expiresIn: ACCESS_TTL_SECONDS,
+      header,
+    });
 
     const refresh_token = jwt.sign(
       { sub: subject, jti: crypto.randomUUID() },
@@ -54,7 +49,10 @@ function buildTokenService() {
       }
     );
 
-    return  { access_token: access_token, refresh_token: refresh_token };
+    return {
+      access_token,
+      refresh_token,
+    };
   }
 
   function getUserIdFromToken(token) {
@@ -73,7 +71,12 @@ function buildTokenService() {
     }
   }
 
-  return { signTokens, getUserIdFromToken };
+  return {
+    signTokens,
+    getUserIdFromToken,
+  };
 }
 
-module.exports = { buildTokenService };
+module.exports = {
+  buildTokenService,
+};

@@ -86,7 +86,6 @@ function buildProductsRoutes(productUseCases, tokenService) {
           return res.json(400, { error: "Invalid product ID" });
         }
         const product = await productUseCases.getProduct(id);
-        console.log(product)
         if (!product) {
           return res.json(404, { error: "Product not found" });
         }

@@ -1,111 +1,178 @@
-const { buildUserWithCartPipeline } = require("../../../domain/user/buildUserWithCartPipeline");
-const { mapUserDto } = require("../../../domain/user/mapUserDto");
 const { toObjectIdOrNull } = require("../objectId");
+const {
+  normalizeCartItems,
+  toUserDocument,
+  toUserDto,
+  toUserUpdateDocument,
+} = require("../mappers/userMapper");
 
-function buildMongoUserRepository(collections, collectionNames) {
-  const { users, cartItems } = collections;
+function buildMongoUserRepository(collections) {
+  const { users, products } = collections;
+
+  function getLegacyCartItems(userDoc) {
+    if (Array.isArray(userDoc?.cartItems)) {
+      return userDoc.cartItems;
+    }
+
+    if (Array.isArray(userDoc?.cart)) {
+      return userDoc.cart.map((productId) => ({ productId, quantity: 1 }));
+    }
+
+    return [];
+  }
+
+  function buildLegacyUserPatch(userDoc) {
+    const patch = {};
+
+    if (!userDoc) return patch;
+
+    if (
+      userDoc.passwordHash === undefined &&
+      typeof userDoc.password_hash === "string" &&
+      userDoc.password_hash.length > 0
+    ) {
+      patch.passwordHash = userDoc.password_hash;
+    }
+
+    if (!Array.isArray(userDoc.cartItems)) {
+      patch.cartItems = normalizeCartItems(getLegacyCartItems(userDoc));
+    }
+
+    if (!(userDoc.createdAt instanceof Date)) {
+      patch.createdAt = new Date();
+    }
+
+    return patch;
+  }
+
+  async function findUserById(userId, options = {}) {
+    const objectId = toObjectIdOrNull(userId);
+    if (!objectId) return null;
+    return users.findOne({ _id: objectId }, options);
+  }
+
+  async function assertProductExists(productId) {
+    const objectId = toObjectIdOrNull(productId);
+    if (!objectId) return null;
+    const exists = await products.findOne({ _id: objectId }, { projection: { _id: 1 } });
+    return exists ? objectId : null;
+  }
 
   async function getAll() {
-    const rows = await users.aggregate(buildUserWithCartPipeline(collectionNames)).toArray();
-    return rows.map(mapUserDto);
+    const docs = await users.find({}).sort({ _id: 1 }).toArray();
+    return docs.map(toUserDto);
   }
 
   async function getById(id) {
-    const objectId = toObjectIdOrNull(id);
-    if (!objectId) return null;
-
-    const rows = await users
-      .aggregate(buildUserWithCartPipeline(collectionNames, { _id: objectId }))
-      .toArray();
-
-    return mapUserDto(rows[0] || null);
+    const doc = await findUserById(id);
+    return toUserDto(doc);
   }
 
   async function getByEmail(email) {
-    const rows = await users
-      .aggregate(buildUserWithCartPipeline(collectionNames, { email }))
-      .toArray();
-
-    return mapUserDto(rows[0] || null);
+    const normalized = String(email || "").trim().toLowerCase();
+    if (!normalized) return null;
+    const doc = await users.findOne({ email: normalized });
+    return toUserDto(doc);
   }
 
   async function create(data, hashedPassword) {
-    const result = await users.insertOne({
-      email: data.email,
-      name: data.name,
-      password_hash: hashedPassword,
-    });
-
-    return {
-      id: result.insertedId.toString(),
-      email: data.email,
-      name: data.name,
-      cart: [],
-    };
+    const now = new Date();
+    const doc = toUserDocument(data, hashedPassword, now);
+    const result = await users.insertOne(doc);
+    const created = await users.findOne({ _id: result.insertedId });
+    return toUserDto(created);
   }
 
   async function update(id, data) {
     const objectId = toObjectIdOrNull(id);
     if (!objectId) return null;
 
-    const updates = {};
-    if (data.email !== undefined) updates.email = data.email;
-    if (data.name !== undefined) updates.name = data.name;
+    const existing = await users.findOne({ _id: objectId });
+    if (!existing) return null;
 
-    if (Object.keys(updates).length > 0) {
-      await users.updateOne({ _id: objectId }, { $set: updates });
+    const updates = toUserUpdateDocument(data);
+    const legacyPatch = buildLegacyUserPatch(existing);
+
+    const set = {
+      ...(updates.$set || {}),
+      ...legacyPatch,
+    };
+
+    if (Object.keys(set).length > 0) {
+      await users.updateOne({ _id: objectId }, { $set: set });
     }
 
-    return getById(id);
+    const updated = await users.findOne({ _id: objectId });
+    return toUserDto(updated);
   }
 
   async function remove(id) {
     const objectId = toObjectIdOrNull(id);
     if (!objectId) return false;
 
-    const [userResult] = await Promise.all([
-      users.deleteOne({ _id: objectId }),
-      cartItems.deleteMany({ user_id: objectId }),
-    ]);
-
-    return userResult.deletedCount === 1;
+    const result = await users.deleteOne({ _id: objectId });
+    return result.deletedCount === 1;
   }
 
   async function getPassword(userId) {
-    const objectId = toObjectIdOrNull(userId);
-    if (!objectId) return undefined;
+    const doc = await findUserById(userId, {
+      projection: { passwordHash: 1, password_hash: 1 },
+    });
 
-    const doc = await users.findOne(
-      { _id: objectId },
-      { projection: { password_hash: 1 } }
-    );
-
-    return doc ? doc.password_hash : undefined;
+    if (!doc) return undefined;
+    return doc.passwordHash || doc.password_hash;
   }
 
   async function setPassword(userId, hashedPassword) {
     const objectId = toObjectIdOrNull(userId);
     if (!objectId) return;
 
+    const user = await users.findOne({ _id: objectId });
+    if (!user) return;
+    const legacyPatch = buildLegacyUserPatch(user);
+
     await users.updateOne(
       { _id: objectId },
-      { $set: { password_hash: hashedPassword } }
+      {
+        $set: {
+          ...legacyPatch,
+          passwordHash: hashedPassword,
+          updatedAt: new Date(),
+        },
+      }
     );
   }
 
   async function addToCart(userId, productId) {
     const userObjectId = toObjectIdOrNull(userId);
-    const productObjectId = toObjectIdOrNull(productId);
+    if (!userObjectId) return null;
 
-    if (!userObjectId || !productObjectId) return null;
+    const productObjectId = await assertProductExists(productId);
+    if (!productObjectId) return null;
 
-    const userExists = await users.findOne({ _id: userObjectId }, { projection: { _id: 1 } });
-    if (!userExists) return null;
+    const user = await users.findOne({ _id: userObjectId });
+    if (!user) return null;
 
-    await cartItems.updateOne(
-      { user_id: userObjectId, product_id: productObjectId },
-      { $inc: { quantity: 1 } },
-      { upsert: true }
+    const cartItems = normalizeCartItems(getLegacyCartItems(user));
+    const key = productObjectId.toString();
+    const existing = cartItems.find((item) => item.productId.toString() === key);
+
+    if (existing) {
+      existing.quantity += 1;
+    } else {
+      cartItems.push({ productId: productObjectId, quantity: 1 });
+    }
+
+    const legacyPatch = buildLegacyUserPatch(user);
+    await users.updateOne(
+      { _id: userObjectId },
+      {
+        $set: {
+          ...legacyPatch,
+          cartItems,
+          updatedAt: new Date(),
+        },
+      }
     );
 
     return getById(userId);
@@ -115,24 +182,40 @@ function buildMongoUserRepository(collections, collectionNames) {
     const userObjectId = toObjectIdOrNull(userId);
     if (!userObjectId) return null;
 
-    const userExists = await users.findOne({ _id: userObjectId }, { projection: { _id: 1 } });
-    if (!userExists) return null;
+    const user = await users.findOne({ _id: userObjectId });
+    if (!user) return null;
 
-    const productObjectIds = (Array.isArray(productIds) ? productIds : [])
-      .map((id) => toObjectIdOrNull(id))
-      .filter((id) => id !== null);
+    const productObjectIds = [];
+    const sourceIds = Array.isArray(productIds) ? productIds : [];
 
-    if (productObjectIds.length > 0) {
-      await cartItems.bulkWrite(
-        productObjectIds.map((productObjectId) => ({
-          updateOne: {
-            filter: { user_id: userObjectId, product_id: productObjectId },
-            update: { $inc: { quantity: 1 } },
-            upsert: true,
-          },
-        }))
-      );
+    for (const productId of sourceIds) {
+      const objectId = await assertProductExists(productId);
+      if (objectId) productObjectIds.push(objectId);
     }
+
+    const cartItems = normalizeCartItems(getLegacyCartItems(user));
+
+    for (const productObjectId of productObjectIds) {
+      const key = productObjectId.toString();
+      const existing = cartItems.find((item) => item.productId.toString() === key);
+      if (existing) {
+        existing.quantity += 1;
+      } else {
+        cartItems.push({ productId: productObjectId, quantity: 1 });
+      }
+    }
+
+    const legacyPatch = buildLegacyUserPatch(user);
+    await users.updateOne(
+      { _id: userObjectId },
+      {
+        $set: {
+          ...legacyPatch,
+          cartItems,
+          updatedAt: new Date(),
+        },
+      }
+    );
 
     return getById(userId);
   }
@@ -140,13 +223,27 @@ function buildMongoUserRepository(collections, collectionNames) {
   async function removeFromCart(userId, productId) {
     const userObjectId = toObjectIdOrNull(userId);
     const productObjectId = toObjectIdOrNull(productId);
-
     if (!userObjectId || !productObjectId) return null;
 
-    const userExists = await users.findOne({ _id: userObjectId }, { projection: { _id: 1 } });
-    if (!userExists) return null;
+    const user = await users.findOne({ _id: userObjectId });
+    if (!user) return null;
 
-    await cartItems.deleteOne({ user_id: userObjectId, product_id: productObjectId });
+    const key = productObjectId.toString();
+    const cartItems = normalizeCartItems(getLegacyCartItems(user)).filter(
+      (item) => item.productId.toString() !== key
+    );
+
+    const legacyPatch = buildLegacyUserPatch(user);
+    await users.updateOne(
+      { _id: userObjectId },
+      {
+        $set: {
+          ...legacyPatch,
+          cartItems,
+          updatedAt: new Date(),
+        },
+      }
+    );
 
     return getById(userId);
   }
@@ -155,10 +252,21 @@ function buildMongoUserRepository(collections, collectionNames) {
     const userObjectId = toObjectIdOrNull(userId);
     if (!userObjectId) return null;
 
-    const userExists = await users.findOne({ _id: userObjectId }, { projection: { _id: 1 } });
-    if (!userExists) return null;
+    const user = await users.findOne({ _id: userObjectId });
+    if (!user) return null;
 
-    await cartItems.deleteMany({ user_id: userObjectId });
+    const legacyPatch = buildLegacyUserPatch(user);
+    await users.updateOne(
+      { _id: userObjectId },
+      {
+        $set: {
+          ...legacyPatch,
+          cartItems: [],
+          updatedAt: new Date(),
+        },
+      }
+    );
+
     return getById(userId);
   }
 
@@ -175,7 +283,6 @@ function buildMongoUserRepository(collections, collectionNames) {
     addManyToCart,
     removeFromCart,
     clearCart,
-    buildUserWithCartPipeline: (match = {}) => buildUserWithCartPipeline(collectionNames, match),
   };
 }
 

@@ -1,7 +1,6 @@
 const { MongoClient } = require("mongodb");
 const { products: seedProducts } = require("../infrastructure/data/products");
 const {
-  COLLECTION_NAMES,
   COLLECTION_VALIDATORS,
   buildCollections,
 } = require("../infrastructure/mongo/collections");
@@ -14,6 +13,9 @@ const {
 const {
   buildMongoUserRepository,
 } = require("../infrastructure/mongo/repositories/userMongoRepository");
+const {
+  buildMongoRefreshTokenRepository,
+} = require("../infrastructure/mongo/repositories/refreshTokenMongoRepository");
 
 async function buildMongoRepositories(config = {}) {
   const uri = config.uri || process.env.MONGODB_URI || "mongodb://localhost:27017";
@@ -32,12 +34,12 @@ async function buildMongoRepositories(config = {}) {
   await ensureSeedProducts(collections, seedProducts);
 
   return {
-    productRepository: buildMongoProductRepository(collections, COLLECTION_NAMES),
-    userRepository: buildMongoUserRepository(collections, COLLECTION_NAMES),
+    productRepository: buildMongoProductRepository(collections),
+    userRepository: buildMongoUserRepository(collections),
+    refreshTokenRepository: buildMongoRefreshTokenRepository(collections),
   };
 }
 
 module.exports = {
   buildMongoRepositories,
-  COLLECTION_NAMES,
 };

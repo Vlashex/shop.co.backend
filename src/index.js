@@ -6,13 +6,7 @@ const { buildUsersRoutes } = require("./adapters/http/routes/users");
 const { buildAuthRoutes } = require("./adapters/http/routes/auth");
 const { buildCartRoutes } = require("./adapters/http/routes/cart");
 const { buildRateLimiter } = require("./adapters/http/middlewares/rateLimit");
-const {
-  buildRepositories: buildMongoRepositories,
-} = require("./infrastructure/store/mongoStore");
-const {
-  buildRepositories: buildMariaRepositories,
-} = require("./infrastructure/store/mariaStore");
-const { buildRedisStore } = require("./infrastructure/store/redisStore");
+const { buildMongoRepositories } = require("./app/buildMongoRepositories");
 const {
   buildProductUseCases,
 } = require("./application/use-cases/products");
@@ -291,18 +285,11 @@ const server = http.createServer(async (req, res) => {
 });
 
 async function start() {
-  const dbType = (process.env.DB_TYPE || "mongodb").toLowerCase();
-  let repositories;
-  if (dbType === "mariadb") {
-    repositories = await buildMariaRepositories();
-  } else {
-    repositories = await buildMongoRepositories();
-  }
+  const repositories = await buildMongoRepositories();
   const hashService = buildHashService();
   const tokenService = buildTokenService();
-  const { refreshTokenStore } = await buildRedisStore();
   const refreshTokenService = buildRefreshTokenService(
-    refreshTokenStore,
+    repositories.refreshTokenRepository,
     tokenService,
     console
   );

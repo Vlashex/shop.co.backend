@@ -12,7 +12,7 @@ function getRequiredEnv(name) {
   return value;
 }
 
-function buildRefreshTokenService(refreshStore, tokenService, auditLogger = console) {
+function buildRefreshTokenService(refreshTokenRepository, tokenService, auditLogger = console) {
   const refreshSecret = getRequiredEnv("REFRESH_TOKEN_SECRET");
   const tokenHashSecret = getRequiredEnv("REFRESH_TOKEN_HASH_SECRET");
   const issuer = getRequiredEnv("JWT_ISSUER");
@@ -67,14 +67,10 @@ function buildRefreshTokenService(refreshStore, tokenService, auditLogger = cons
       throw new Error("Issued refresh token missing exp");
     }
 
-    const userId = decoded.sub;
-    const jti = decoded.jti;
-    const expiresInSeconds = Math.max(decoded.exp - Math.floor(Date.now() / 1000), 1);
-
     const session = {
-      jti,
-      userId,
-      familyId: jti,
+      jti: decoded.jti,
+      userId: decoded.sub,
+      familyId: decoded.jti,
       tokenHash: hashToken(refreshToken),
       rotatedTo: null,
       revokedAt: null,
@@ -85,21 +81,19 @@ function buildRefreshTokenService(refreshStore, tokenService, auditLogger = cons
       expiresAt: new Date(decoded.exp * 1000).toISOString(),
     };
 
-    await refreshStore.save(session, expiresInSeconds);
-    await refreshStore.addUserJti(userId, jti, expiresInSeconds);
+    await refreshTokenRepository.save(session);
   }
 
   async function revokeAllUserTokens(userId, reason) {
-    const jtis = await refreshStore.getUserJtis(userId);
+    const jtis = await refreshTokenRepository.listActiveByUserId(userId);
     await Promise.all(
       jtis.map((jti) =>
-        refreshStore.revoke(jti, {
+        refreshTokenRepository.revoke(jti, {
           reason,
           revokedAt: new Date().toISOString(),
         })
       )
     );
-    await refreshStore.clearUserJtis(userId);
   }
 
   async function rotate(refreshToken, metadata = {}) {
@@ -124,7 +118,7 @@ function buildRefreshTokenService(refreshStore, tokenService, auditLogger = cons
 
     const userId = payload.sub;
     const jti = payload.jti;
-    const session = await refreshStore.getByJti(jti);
+    const session = await refreshTokenRepository.getByJti(jti);
 
     if (!session) {
       await revokeAllUserTokens(userId, "reuse-detected-missing-session");
@@ -167,33 +161,25 @@ function buildRefreshTokenService(refreshStore, tokenService, auditLogger = cons
       return { data: null, error: { code: "TOKEN_INVALID", statusCode: 500 } };
     }
 
-    const nextExpiresIn = Math.max(nextPayload.exp - Math.floor(Date.now() / 1000), 1);
-
-    await refreshStore.revoke(jti, {
+    await refreshTokenRepository.revoke(jti, {
       reason: "rotated",
       revokedAt: new Date().toISOString(),
       rotatedTo: nextPayload.jti,
     });
 
-    await refreshStore.save(
-      {
-        jti: nextPayload.jti,
-        userId,
-        familyId: session.familyId || session.jti,
-        tokenHash: hashToken(nextTokens.refresh_token),
-        rotatedTo: null,
-        revokedAt: null,
-        keyVersion,
-        ip: metadata.ip || null,
-        userAgent: metadata.userAgent || null,
-        createdAt: new Date().toISOString(),
-        expiresAt: new Date(nextPayload.exp * 1000).toISOString(),
-      },
-      nextExpiresIn
-    );
-
-    await refreshStore.addUserJti(userId, nextPayload.jti, nextExpiresIn);
-    await refreshStore.removeUserJti(userId, jti);
+    await refreshTokenRepository.save({
+      jti: nextPayload.jti,
+      userId,
+      familyId: session.familyId || session.jti,
+      tokenHash: hashToken(nextTokens.refresh_token),
+      rotatedTo: null,
+      revokedAt: null,
+      keyVersion,
+      ip: metadata.ip || null,
+      userAgent: metadata.userAgent || null,
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(nextPayload.exp * 1000).toISOString(),
+    });
 
     return { data: nextTokens, error: null };
   }
@@ -206,12 +192,12 @@ function buildRefreshTokenService(refreshStore, tokenService, auditLogger = cons
       return;
     }
 
-    if (typeof payload.jti !== "string" || typeof payload.sub !== "string") return;
-    await refreshStore.revoke(payload.jti, {
+    if (typeof payload.jti !== "string") return;
+
+    await refreshTokenRepository.revoke(payload.jti, {
       reason: "logout",
       revokedAt: new Date().toISOString(),
     });
-    await refreshStore.removeUserJti(payload.sub, payload.jti);
   }
 
   return {

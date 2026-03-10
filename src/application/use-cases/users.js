@@ -8,20 +8,15 @@ function buildUserUseCases({ userRepository }, hashService) {
   }
 
   async function createUser(data) {
-    const hashedPassword = hashService.isLikelyHashed(data.password)
-      ? data.password
-      : hashService.hash(data.password);
-
+    const hashedPassword = await hashService.hash(data.password);
     return userRepository.create(data, hashedPassword);
   }
 
   async function updateUser(id, data) {
     const updates = { ...data };
 
-    if (updates.password) {
-      const hashedPassword = hashService.isLikelyHashed(updates.password)
-        ? updates.password
-        : hashService.hash(updates.password);
+    if (typeof updates.password === "string" && updates.password.length > 0) {
+      const hashedPassword = await hashService.hash(updates.password);
       await userRepository.setPassword(id, hashedPassword);
       delete updates.password;
     }
