@@ -50,16 +50,19 @@ function buildMariaUserRepository(pool) {
   async function update(id, data) {
     const fields = [];
     const values = [];
+    const payload = data || {};
 
-    for (const [key, value] of Object.entries(data || {})) {
-      if (value === undefined) continue;
-      if (key === "cart") {
-        fields.push("cart = ?");
-        values.push(JSON.stringify(value || []));
-        continue;
-      }
-      fields.push(`${key} = ?`);
-      values.push(value);
+    if (payload.email !== undefined) {
+      fields.push("email = ?");
+      values.push(payload.email);
+    }
+    if (payload.name !== undefined) {
+      fields.push("name = ?");
+      values.push(payload.name);
+    }
+    if (payload.cart !== undefined) {
+      fields.push("cart = ?");
+      values.push(JSON.stringify(payload.cart || []));
     }
 
     if (!fields.length) {

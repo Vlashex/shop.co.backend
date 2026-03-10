@@ -77,21 +77,44 @@ function buildMariaProductRepository(pool) {
   async function update(id, data) {
     const fields = [];
     const values = [];
+    const payload = data || {};
 
-    for (const [key, value] of Object.entries(data || {})) {
-      if (value === undefined) continue;
-      if (["images", "sizes", "styles", "colors"].includes(key)) {
-        fields.push(`${key} = ?`);
-        values.push(JSON.stringify(value || []));
-        continue;
-      }
-      fields.push(`${key} = ?`);
-      values.push(value);
+    if (payload.title !== undefined) {
+      fields.push("title = ?");
+      values.push(payload.title);
+    }
+    if (payload.price !== undefined) {
+      fields.push("price = ?");
+      values.push(payload.price);
+    }
+    if (payload.rate !== undefined) {
+      fields.push("rate = ?");
+      values.push(payload.rate);
+    }
+    if (payload.category !== undefined) {
+      fields.push("category = ?");
+      values.push(payload.category);
+    }
+    if (payload.images !== undefined) {
+      fields.push("images = ?");
+      values.push(JSON.stringify(payload.images || []));
+    }
+    if (payload.sizes !== undefined) {
+      fields.push("sizes = ?");
+      values.push(JSON.stringify(payload.sizes || []));
+    }
+    if (payload.styles !== undefined) {
+      fields.push("styles = ?");
+      values.push(JSON.stringify(payload.styles || []));
+    }
+    if (payload.colors !== undefined) {
+      fields.push("colors = ?");
+      values.push(JSON.stringify(payload.colors || []));
     }
 
-    if (data && data.price !== undefined) {
+    if (payload.price !== undefined) {
       fields.push("previousPrice = ?");
-      values.push(Number(data.price) * 1.2);
+      values.push(Number(payload.price) * 1.2);
     }
 
     if (!fields.length) {

@@ -318,8 +318,8 @@ async function start() {
   const cartUseCases = buildCartUseCases(repositories);
 
   routes = [
-    ...buildProductsRoutes(productUseCases),
-    ...buildUsersRoutes(userUseCases),
+    ...buildProductsRoutes(productUseCases, tokenService),
+    ...buildUsersRoutes(userUseCases, tokenService),
     ...buildAuthRoutes(authUseCases),
     ...buildCartRoutes(cartUseCases, tokenService),
     {

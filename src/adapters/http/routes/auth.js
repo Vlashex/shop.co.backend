@@ -62,7 +62,9 @@ function buildAuthRoutes(authUseCases) {
         setRefreshCookie(res, result.data.tokens.refresh_token);
         return res.json(201, {
           user: result.data.user,
-          tokens: result.data.tokens,
+          tokens: {
+            access_token: result.data.tokens.access_token,
+          },
         });
       },
     },
@@ -96,7 +98,9 @@ function buildAuthRoutes(authUseCases) {
         setRefreshCookie(res, result.data.tokens.refresh_token);
         return res.json(200, {
           user: result.data.user,
-          tokens: result.data.tokens,
+          tokens: {
+            access_token: result.data.tokens.access_token,
+          },
         });
       },
     },
@@ -126,7 +130,6 @@ function buildAuthRoutes(authUseCases) {
         setRefreshCookie(res, result.data.refresh_token);
         return res.json(200, {
           access_token: result.data.access_token,
-          refresh_token: result.data.refresh_token,
         });
       },
     },

@@ -2,7 +2,33 @@ function isObjectIdLike(value) {
   return typeof value === "string" && /^[a-fA-F0-9]{24}$/.test(value);
 }
 
-function buildProductsRoutes(productUseCases) {
+function buildProductsRoutes(productUseCases, tokenService) {
+  const adminUserIds = new Set(
+    (process.env.ADMIN_USER_IDS || "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean)
+  );
+
+  function getUserId(headers) {
+    const authHeader = headers.authorization;
+    if (!authHeader) return null;
+    return tokenService.getUserIdFromToken(authHeader);
+  }
+
+  function ensureAdmin(headers, res) {
+    const userId = getUserId(headers);
+    if (!userId) {
+      res.json(401, { error: "Invalid or missing token" });
+      return false;
+    }
+    if (!adminUserIds.has(userId)) {
+      res.json(403, { error: "Forbidden" });
+      return false;
+    }
+    return true;
+  }
+
   return [
     {
       method: "GET",
@@ -34,7 +60,9 @@ function buildProductsRoutes(productUseCases) {
     {
       method: "POST",
       path: "/api/products/seed",
-      handler: async (_ctx, res) => {
+      handler: async ({ headers }, res) => {
+        if (!ensureAdmin(headers, res)) return;
+
         const product = await productUseCases.createProduct({
           title: "Sample Product 1",
           price: 99,
@@ -69,7 +97,9 @@ function buildProductsRoutes(productUseCases) {
     {
       method: "POST",
       path: "/api/products",
-      handler: async ({ body }, res) => {
+      handler: async ({ headers, body }, res) => {
+        if (!ensureAdmin(headers, res)) return;
+
         const { title, price, rate, images, category, sizes, styles, colors } =
           body || {};
 
@@ -98,7 +128,9 @@ function buildProductsRoutes(productUseCases) {
     {
       method: "PUT",
       path: "/api/products/:id",
-      handler: async ({ params, body }, res) => {
+      handler: async ({ headers, params, body }, res) => {
+        if (!ensureAdmin(headers, res)) return;
+
         const id = params.id;
         if (!isObjectIdLike(id)) {
           return res.json(400, { error: "Invalid product ID" });
@@ -119,7 +151,9 @@ function buildProductsRoutes(productUseCases) {
     {
       method: "DELETE",
       path: "/api/products/:id",
-      handler: async ({ params }, res) => {
+      handler: async ({ headers, params }, res) => {
+        if (!ensureAdmin(headers, res)) return;
+
         const id = params.id;
         if (!isObjectIdLike(id)) {
           return res.json(400, { error: "Invalid product ID" });
