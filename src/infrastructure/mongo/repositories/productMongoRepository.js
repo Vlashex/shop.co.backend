@@ -14,6 +14,8 @@ function buildMongoProductRepository(collections) {
     return (
       !doc.pricing ||
       !doc.attributes ||
+      !Array.isArray(doc.variants) ||
+      doc.variants.length === 0 ||
       typeof doc.category !== "string" ||
       doc.category.trim().length === 0
     );
@@ -52,6 +54,7 @@ function buildMongoProductRepository(collections) {
       sizes: overrides.sizes ?? doc.attributes?.sizes ?? doc.sizes,
       styles: overrides.styles ?? doc.attributes?.styles ?? doc.styles,
       colors: overrides.colors ?? doc.attributes?.colors ?? doc.colors,
+      variants: overrides.variants ?? doc.variants,
     };
   }
 

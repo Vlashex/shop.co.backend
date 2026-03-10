@@ -23,6 +23,16 @@
  */
 
 /**
+ * @typedef {Object} ProductVariant
+ * @property {string} id
+ * @property {string} size
+ * @property {string} style
+ * @property {string} color
+ * @property {number} price
+ * @property {number} stock
+ */
+
+/**
  * @typedef {Object} Product
  * @property {ProductId} id
  * @property {string} title
@@ -31,6 +41,7 @@
  * @property {string} category
  * @property {string[]} images
  * @property {ProductAttributes} attributes
+ * @property {ProductVariant[]} variants
  */
 
 /**
@@ -47,6 +58,7 @@
  * @property {string[]} sizes
  * @property {string[]} styles
  * @property {string[]} colors
+ * @property {ProductVariant[]} variants
  */
 
 /**
@@ -60,6 +72,7 @@
  * @property {string[]} [sizes]
  * @property {string[]} [styles]
  * @property {string[]} [colors]
+ * @property {ProductVariant[]} [variants]
  */
 
 /**
@@ -73,6 +86,7 @@
  * @property {string[]} [sizes]
  * @property {string[]} [styles]
  * @property {string[]} [colors]
+ * @property {ProductVariant[]} [variants]
  */
 
 /**
@@ -136,6 +150,39 @@
  * @property {string} createdAt
  * @property {string} expiresAt
  * @property {string|null} [reason]
+ */
+
+/**
+ * @typedef {"created"|"paid"|"fulfilled"|"canceled"} OrderStatus
+ */
+
+/**
+ * @typedef {Object} OrderItemInput
+ * @property {ProductId} productId
+ * @property {string} variantId
+ * @property {number} quantity
+ */
+
+/**
+ * @typedef {Object} OrderItem
+ * @property {ProductId} productId
+ * @property {string} variantId
+ * @property {string} productTitle
+ * @property {{size: string, style: string, color: string}} variant
+ * @property {number} quantity
+ * @property {number} unitPrice
+ * @property {number} lineTotal
+ */
+
+/**
+ * @typedef {Object} Order
+ * @property {string} id
+ * @property {UserId} userId
+ * @property {OrderStatus} status
+ * @property {OrderItem[]} items
+ * @property {number} totalPrice
+ * @property {string} createdAt
+ * @property {string} updatedAt
  */
 
 module.exports = {};

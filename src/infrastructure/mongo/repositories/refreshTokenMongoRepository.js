@@ -14,10 +14,20 @@ function buildMongoRefreshTokenRepository(collections) {
   async function save(session) {
     const doc = toRefreshSessionDocument(session);
 
+    const { createdAt, ...updateFields } = doc;
+
     await refreshTokens.updateOne(
       { jti: doc.jti },
-      { $set: doc, $setOnInsert: { createdAt: doc.createdAt } },
-      { upsert: true }
+      {
+        $set: {
+          ...updateFields,
+          updatedAt: new Date(),
+        },
+        $setOnInsert: {
+          createdAt,
+        },
+      },
+      { upsert: true },
     );
   }
 

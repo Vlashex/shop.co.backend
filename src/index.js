@@ -5,6 +5,7 @@ const { buildProductsRoutes } = require("./adapters/http/routes/products");
 const { buildUsersRoutes } = require("./adapters/http/routes/users");
 const { buildAuthRoutes } = require("./adapters/http/routes/auth");
 const { buildCartRoutes } = require("./adapters/http/routes/cart");
+const { buildOrdersRoutes } = require("./adapters/http/routes/orders");
 const { buildRateLimiter } = require("./adapters/http/middlewares/rateLimit");
 const { buildMongoRepositories } = require("./app/buildMongoRepositories");
 const {
@@ -13,6 +14,7 @@ const {
 const { buildUserUseCases } = require("./application/use-cases/users");
 const { buildAuthUseCases } = require("./application/use-cases/auth");
 const { buildCartUseCases } = require("./application/use-cases/cart");
+const { buildOrderUseCases } = require("./application/use-cases/orders");
 const { buildTokenService } = require("./application/services/tokenService");
 const { buildHashService } = require("./application/services/hashService");
 const {
@@ -303,12 +305,14 @@ async function start() {
     refreshTokenService
   );
   const cartUseCases = buildCartUseCases(repositories);
+  const orderUseCases = buildOrderUseCases(repositories);
 
   routes = [
     ...buildProductsRoutes(productUseCases, tokenService),
     ...buildUsersRoutes(userUseCases, tokenService),
     ...buildAuthRoutes(authUseCases),
     ...buildCartRoutes(cartUseCases, tokenService),
+    ...buildOrdersRoutes(orderUseCases, tokenService),
     {
       method: "GET",
       path: "/api/health",

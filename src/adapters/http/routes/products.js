@@ -72,6 +72,16 @@ function buildProductsRoutes(productUseCases, tokenService) {
           sizes: ["Medium"],
           styles: ["casual"],
           colors: ["black"],
+          variants: [
+            {
+              id: "medium-casual-black",
+              size: "Medium",
+              style: "casual",
+              color: "black",
+              price: 99,
+              stock: 20,
+            },
+          ],
         });
 
         return res.json(201, product);
@@ -99,7 +109,17 @@ function buildProductsRoutes(productUseCases, tokenService) {
       handler: async ({ headers, body }, res) => {
         if (!ensureAdmin(headers, res)) return;
 
-        const { title, price, rate, images, category, sizes, styles, colors } =
+        const {
+          title,
+          price,
+          rate,
+          images,
+          category,
+          sizes,
+          styles,
+          colors,
+          variants,
+        } =
           body || {};
 
         if (!title || price === undefined || rate === undefined || !category) {
@@ -116,6 +136,7 @@ function buildProductsRoutes(productUseCases, tokenService) {
             sizes,
             styles,
             colors,
+            variants,
           });
 
           return res.json(201, product);

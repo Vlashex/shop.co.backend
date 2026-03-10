@@ -6,13 +6,19 @@ const {
 } = require("../infrastructure/mongo/collections");
 const { ensureCollections } = require("../infrastructure/mongo/schema");
 const { ensureIndexes } = require("../infrastructure/mongo/indexes");
-const { ensureSeedProducts } = require("../infrastructure/mongo/seed");
+const {
+  ensureSeedProducts,
+  ensureProductInventoryShape,
+} = require("../infrastructure/mongo/seed");
 const {
   buildMongoProductRepository,
 } = require("../infrastructure/mongo/repositories/productMongoRepository");
 const {
   buildMongoUserRepository,
 } = require("../infrastructure/mongo/repositories/userMongoRepository");
+const {
+  buildMongoOrderRepository,
+} = require("../infrastructure/mongo/repositories/orderMongoRepository");
 const {
   buildMongoRefreshTokenRepository,
 } = require("../infrastructure/mongo/repositories/refreshTokenMongoRepository");
@@ -32,10 +38,12 @@ async function buildMongoRepositories(config = {}) {
 
   await ensureIndexes(collections);
   await ensureSeedProducts(collections, seedProducts);
+  await ensureProductInventoryShape(collections);
 
   return {
     productRepository: buildMongoProductRepository(collections),
     userRepository: buildMongoUserRepository(collections),
+    orderRepository: buildMongoOrderRepository(collections, client),
     refreshTokenRepository: buildMongoRefreshTokenRepository(collections),
   };
 }

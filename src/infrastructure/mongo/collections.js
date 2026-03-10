@@ -1,6 +1,7 @@
 const COLLECTION_NAMES = {
   users: "users",
   products: "products",
+  orders: "orders",
   refreshTokens: "refresh_tokens",
 };
 
@@ -34,7 +35,15 @@ const COLLECTION_VALIDATORS = {
   [COLLECTION_NAMES.products]: {
     $jsonSchema: {
       bsonType: "object",
-      required: ["title", "pricing", "rating", "category", "images", "attributes"],
+      required: [
+        "title",
+        "pricing",
+        "rating",
+        "category",
+        "images",
+        "attributes",
+        "variants",
+      ],
       properties: {
         title: { bsonType: "string", minLength: 1 },
         pricing: {
@@ -62,6 +71,71 @@ const COLLECTION_VALIDATORS = {
           },
           additionalProperties: false,
         },
+        variants: {
+          bsonType: "array",
+          minItems: 1,
+          items: {
+            bsonType: "object",
+            required: ["id", "stock", "price"],
+            properties: {
+              id: { bsonType: "string", minLength: 1 },
+              size: { bsonType: "string" },
+              style: { bsonType: "string" },
+              color: { bsonType: "string" },
+              price: { bsonType: ["double", "int", "long", "decimal"] },
+              stock: { bsonType: ["int", "long"], minimum: 0 },
+            },
+            additionalProperties: false,
+          },
+        },
+        createdAt: { bsonType: "date" },
+        updatedAt: { bsonType: "date" },
+      },
+      additionalProperties: true,
+    },
+  },
+  [COLLECTION_NAMES.orders]: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["userId", "status", "items", "totalPrice", "createdAt", "updatedAt"],
+      properties: {
+        userId: { bsonType: "string", minLength: 1 },
+        status: { bsonType: "string", minLength: 1 },
+        items: {
+          bsonType: "array",
+          minItems: 1,
+          items: {
+            bsonType: "object",
+            required: [
+              "productId",
+              "variantId",
+              "productTitle",
+              "quantity",
+              "unitPrice",
+              "lineTotal",
+            ],
+            properties: {
+              productId: { bsonType: "string", minLength: 1 },
+              variantId: { bsonType: "string", minLength: 1 },
+              productTitle: { bsonType: "string", minLength: 1 },
+              quantity: { bsonType: ["int", "long"], minimum: 1 },
+              unitPrice: { bsonType: ["double", "int", "long", "decimal"], minimum: 0 },
+              lineTotal: { bsonType: ["double", "int", "long", "decimal"], minimum: 0 },
+              variant: {
+                bsonType: "object",
+                required: ["size", "style", "color"],
+                properties: {
+                  size: { bsonType: "string" },
+                  style: { bsonType: "string" },
+                  color: { bsonType: "string" },
+                },
+                additionalProperties: false,
+              },
+            },
+            additionalProperties: false,
+          },
+        },
+        totalPrice: { bsonType: ["double", "int", "long", "decimal"], minimum: 0 },
         createdAt: { bsonType: "date" },
         updatedAt: { bsonType: "date" },
       },
@@ -96,6 +170,7 @@ function buildCollections(db) {
   return {
     users: db.collection(COLLECTION_NAMES.users),
     products: db.collection(COLLECTION_NAMES.products),
+    orders: db.collection(COLLECTION_NAMES.orders),
     refreshTokens: db.collection(COLLECTION_NAMES.refreshTokens),
   };
 }
