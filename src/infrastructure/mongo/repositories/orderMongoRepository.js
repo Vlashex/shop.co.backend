@@ -24,6 +24,19 @@ function hasTransientTransactionError(error) {
   return false;
 }
 
+function isTransactionUnsupportedError(error) {
+  if (!error || typeof error !== "object") return false;
+
+  const message = typeof error.message === "string" ? error.message : "";
+  if (
+    message.includes("Transaction numbers are only allowed on a replica set member or mongos")
+  ) {
+    return true;
+  }
+
+  return error.code === 20;
+}
+
 async function withRetryableTransaction(client, operation, maxRetries = 3) {
   let attempt = 0;
 
@@ -56,11 +69,35 @@ async function withRetryableTransaction(client, operation, maxRetries = 3) {
 function buildMongoOrderRepository(collections, client) {
   const { products, orders } = collections;
 
-  async function createOrder({ userId, items }) {
-    const createdOrder = await withRetryableTransaction(client, async (session) => {
-      const now = new Date();
-      const persistedItems = [];
+  function sessionOptions(session) {
+    return session ? { session } : {};
+  }
 
+  async function rollbackDeductedStocks(deductions, now) {
+    for (const deduction of deductions) {
+      await products.updateOne(
+        {
+          _id: deduction.productObjectId,
+          variants: {
+            $elemMatch: {
+              id: deduction.variantId,
+            },
+          },
+        },
+        {
+          $inc: { "variants.$.stock": new Int32(deduction.quantity) },
+          $set: { updatedAt: now },
+        }
+      );
+    }
+  }
+
+  async function processOrderCreation({ userId, items, session = null }) {
+    const now = new Date();
+    const persistedItems = [];
+    const deductions = [];
+
+    try {
       for (const item of items) {
         const productObjectId = toObjectIdOrNull(item.productId);
         if (!productObjectId) {
@@ -76,7 +113,7 @@ function buildMongoOrderRepository(collections, client) {
           { _id: productObjectId },
           {
             projection: { title: 1, pricing: 1, variants: 1 },
-            session,
+            ...sessionOptions(session),
           }
         );
 
@@ -113,7 +150,6 @@ function buildMongoOrderRepository(collections, client) {
         }
 
         const stock = Number(variant.stock);
-
         if (stock < quantity) {
           throw new OrderDomainError(
             "INSUFFICIENT_STOCK",
@@ -142,7 +178,7 @@ function buildMongoOrderRepository(collections, client) {
             $inc: { "variants.$.stock": new Int32(-quantity) },
             $set: { updatedAt: now },
           },
-          { session }
+          sessionOptions(session)
         );
 
         if (updateResult.modifiedCount !== 1) {
@@ -158,6 +194,12 @@ function buildMongoOrderRepository(collections, client) {
             }
           );
         }
+
+        deductions.push({
+          productObjectId,
+          variantId: item.variantId,
+          quantity,
+        });
 
         const unitPrice = toMoney(
           variant.price,
@@ -193,12 +235,35 @@ function buildMongoOrderRepository(collections, client) {
         updatedAt: now,
       };
 
-      const insertResult = await orders.insertOne(orderDoc, { session });
+      const insertResult = await orders.insertOne(orderDoc, sessionOptions(session));
       return {
         ...orderDoc,
         _id: insertResult.insertedId,
       };
-    });
+    } catch (error) {
+      // When transactions are unavailable, revert already deducted stocks manually.
+      if (!session && deductions.length > 0) {
+        await rollbackDeductedStocks(deductions, new Date());
+      }
+      throw error;
+    }
+  }
+
+  async function createOrder({ userId, items }) {
+    let createdOrder;
+
+    try {
+      createdOrder = await withRetryableTransaction(client, async (session) =>
+        processOrderCreation({ userId, items, session })
+      );
+    } catch (error) {
+      // Fallback for local / non-replica Mongo setups.
+      if (!isTransactionUnsupportedError(error)) {
+        throw error;
+      }
+
+      createdOrder = await processOrderCreation({ userId, items, session: null });
+    }
 
     return toOrderDto(createdOrder);
   }
