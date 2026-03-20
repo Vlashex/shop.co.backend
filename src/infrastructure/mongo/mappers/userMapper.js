@@ -1,9 +1,19 @@
+const { Int32 } = require("mongodb");
+
 const { toObjectIdOrNull } = require("../objectId");
+
+const DEFAULT_VARIANT_ID = "default";
 
 function clampQuantity(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 1;
   return Math.max(1, Math.floor(parsed));
+}
+
+function normalizeVariantId(value) {
+  if (typeof value !== "string") return DEFAULT_VARIANT_ID;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : DEFAULT_VARIANT_ID;
 }
 
 function normalizeCartItems(items = []) {
@@ -15,15 +25,30 @@ function normalizeCartItems(items = []) {
     const productId = toObjectIdOrNull(item?.productId || item?.product_id || item?.id);
     if (!productId) continue;
 
-    const key = productId.toString();
+    const variantId = normalizeVariantId(item?.variantId || item?.variant_id);
+    const key = `${productId.toString()}::${variantId}`;
     const quantity = clampQuantity(item?.quantity);
-    const next = (merged.get(key) || 0) + quantity;
-    merged.set(key, next);
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, { productId, variantId, quantity });
+      continue;
+    }
+
+    existing.quantity += quantity;
   }
 
-  return [...merged.entries()].map(([id, quantity]) => ({
-    productId: toObjectIdOrNull(id),
-    quantity,
+  return [...merged.values()].map((item) => ({
+    productId: item.productId,
+    variantId: item.variantId,
+    quantity: clampQuantity(item.quantity),
+  }));
+}
+
+function toPersistedCartItems(items = []) {
+  return normalizeCartItems(items).map((item) => ({
+    productId: item.productId,
+    variantId: item.variantId,
+    quantity: new Int32(item.quantity),
   }));
 }
 
@@ -60,12 +85,13 @@ function toUserDto(doc) {
   if (!doc) return null;
 
   const legacyCart = Array.isArray(doc.cart)
-    ? doc.cart.map((productId) => ({ productId, quantity: 1 }))
+    ? doc.cart.map((productId) => ({ productId, variantId: DEFAULT_VARIANT_ID, quantity: 1 }))
     : [];
   const sourceCartItems = Array.isArray(doc.cartItems) ? doc.cartItems : legacyCart;
 
   const cartItems = normalizeCartItems(sourceCartItems).map((item) => ({
     productId: item.productId.toString(),
+    variantId: item.variantId,
     quantity: item.quantity,
   }));
 
@@ -79,7 +105,9 @@ function toUserDto(doc) {
 }
 
 module.exports = {
+  DEFAULT_VARIANT_ID,
   normalizeCartItems,
+  toPersistedCartItems,
   toUserDocument,
   toUserUpdateDocument,
   toUserDto,

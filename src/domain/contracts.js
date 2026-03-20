@@ -92,6 +92,7 @@
 /**
  * @typedef {Object} CartItem
  * @property {ProductId} productId
+ * @property {string} variantId
  * @property {number} quantity
  */
 
@@ -144,7 +145,7 @@
  * @property {string} tokenHash
  * @property {string|null} rotatedTo
  * @property {string|null} revokedAt
- * @property {string} keyVersion
+ * @property {"v1"} keyVersion
  * @property {string|null} ip
  * @property {string|null} userAgent
  * @property {string} createdAt
@@ -153,7 +154,7 @@
  */
 
 /**
- * @typedef {"created"|"paid"|"fulfilled"|"canceled"} OrderStatus
+ * @typedef {"created"|"paid"|"shipped"|"delivered"|"cancelled"} OrderStatus
  */
 
 /**

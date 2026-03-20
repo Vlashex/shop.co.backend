@@ -1,17 +1,35 @@
+const { toObjectIdOrNull } = require("../objectId");
+
+function toDateOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function toDateOrNow(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
 function toRefreshSessionDocument(session) {
+  const userObjectId = toObjectIdOrNull(session.userId);
+  if (!userObjectId) {
+    throw new Error("refresh session userId must be a valid ObjectId");
+  }
+
   return {
     jti: session.jti,
-    userId: session.userId,
+    userId: userObjectId,
     familyId: session.familyId,
     tokenHash: session.tokenHash,
     rotatedTo: session.rotatedTo ?? null,
-    revokedAt: session.revokedAt ?? null,
-    keyVersion: session.keyVersion,
+    revokedAt: toDateOrNull(session.revokedAt),
+    keyVersion: session.keyVersion || "v1",
     ip: session.ip ?? null,
     userAgent: session.userAgent ?? null,
     reason: session.reason ?? null,
-    createdAt: new Date(session.createdAt),
-    expiresAt: new Date(session.expiresAt),
+    createdAt: toDateOrNow(session.createdAt),
+    expiresAt: toDateOrNow(session.expiresAt),
     updatedAt: new Date(),
   };
 }
@@ -21,7 +39,10 @@ function toRefreshSessionDto(doc) {
 
   return {
     jti: doc.jti,
-    userId: doc.userId,
+    userId:
+      doc.userId && typeof doc.userId.toString === "function"
+        ? doc.userId.toString()
+        : String(doc.userId || ""),
     familyId: doc.familyId,
     tokenHash: doc.tokenHash,
     rotatedTo: doc.rotatedTo ?? null,

@@ -11,11 +11,17 @@ function toOrderDto(doc) {
 
   return {
     id: doc._id.toString(),
-    userId: doc.userId,
+    userId:
+      doc.userId && typeof doc.userId.toString === "function"
+        ? doc.userId.toString()
+        : String(doc.userId || ""),
     status: doc.status,
     totalPrice: toMoney(doc.totalPrice),
     items: (Array.isArray(doc.items) ? doc.items : []).map((item) => ({
-      productId: item.productId,
+      productId:
+        item.productId && typeof item.productId.toString === "function"
+          ? item.productId.toString()
+          : String(item.productId || ""),
       variantId: item.variantId,
       productTitle: item.productTitle,
       quantity: Number(item.quantity),

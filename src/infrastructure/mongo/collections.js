@@ -5,36 +5,55 @@ const COLLECTION_NAMES = {
   refreshTokens: "refresh_tokens",
 };
 
+const NUMBER_TYPES = ["double", "int", "long", "decimal"];
+
 const COLLECTION_VALIDATORS = {
   [COLLECTION_NAMES.users]: {
     $jsonSchema: {
       bsonType: "object",
-      required: ["email", "name", "passwordHash", "cartItems"],
+      required: ["email", "name", "passwordHash", "cartItems", "createdAt", "updatedAt"],
       properties: {
-        email: { bsonType: "string", minLength: 3 },
+        email: {
+          bsonType: "string",
+          minLength: 5,
+          pattern: "^.+@.+\\..+$",
+        },
+
         name: { bsonType: "string", minLength: 1 },
+
         passwordHash: { bsonType: "string", minLength: 20 },
+
         cartItems: {
           bsonType: "array",
           items: {
             bsonType: "object",
-            required: ["productId", "quantity"],
+            required: ["productId", "variantId", "quantity"],
             properties: {
               productId: { bsonType: "objectId" },
-              quantity: { bsonType: ["int", "long", "double"], minimum: 1 },
+
+              variantId: { bsonType: "string", minLength: 1 },
+
+              quantity: {
+                bsonType: ["int", "long"],
+                minimum: 1,
+              },
             },
             additionalProperties: false,
           },
         },
+
         createdAt: { bsonType: "date" },
         updatedAt: { bsonType: "date" },
       },
-      additionalProperties: true,
+
+      additionalProperties: false,
     },
   },
+
   [COLLECTION_NAMES.products]: {
     $jsonSchema: {
       bsonType: "object",
+
       required: [
         "title",
         "pricing",
@@ -43,69 +62,125 @@ const COLLECTION_VALIDATORS = {
         "images",
         "attributes",
         "variants",
+        "createdAt",
+        "updatedAt",
       ],
+
       properties: {
         title: { bsonType: "string", minLength: 1 },
+
         pricing: {
           bsonType: "object",
-          required: ["current", "previous"],
+          required: ["current"],
           properties: {
-            current: { bsonType: ["double", "int", "long", "decimal"] },
-            previous: { bsonType: ["double", "int", "long", "decimal"] },
+            current: {
+              bsonType: NUMBER_TYPES,
+              minimum: 0,
+            },
+
+            previous: {
+              bsonType: NUMBER_TYPES,
+              minimum: 0,
+            },
           },
           additionalProperties: false,
         },
-        rating: { bsonType: ["double", "int", "long", "decimal"] },
+
+        rating: {
+          bsonType: NUMBER_TYPES,
+          minimum: 0,
+          maximum: 5,
+        },
+
         category: { bsonType: "string", minLength: 1 },
+
         images: {
           bsonType: "array",
+          minItems: 1,
           items: { bsonType: "string" },
         },
+
         attributes: {
           bsonType: "object",
           required: ["sizes", "styles", "colors"],
           properties: {
-            sizes: { bsonType: "array", items: { bsonType: "string" } },
-            styles: { bsonType: "array", items: { bsonType: "string" } },
-            colors: { bsonType: "array", items: { bsonType: "string" } },
+            sizes: {
+              bsonType: "array",
+              items: { bsonType: "string" },
+            },
+
+            styles: {
+              bsonType: "array",
+              items: { bsonType: "string" },
+            },
+
+            colors: {
+              bsonType: "array",
+              items: { bsonType: "string" },
+            },
           },
           additionalProperties: false,
         },
+
         variants: {
           bsonType: "array",
           minItems: 1,
+
           items: {
             bsonType: "object",
-            required: ["id", "stock", "price"],
+
+            required: ["id", "price", "stock"],
+
             properties: {
               id: { bsonType: "string", minLength: 1 },
+
               size: { bsonType: "string" },
               style: { bsonType: "string" },
               color: { bsonType: "string" },
-              price: { bsonType: ["double", "int", "long", "decimal"] },
-              stock: { bsonType: ["int", "long"], minimum: 0 },
+
+              price: {
+                bsonType: NUMBER_TYPES,
+                minimum: 0,
+              },
+
+              stock: {
+                bsonType: ["int", "long"],
+                minimum: 0,
+              },
             },
+
             additionalProperties: false,
           },
         },
+
         createdAt: { bsonType: "date" },
         updatedAt: { bsonType: "date" },
       },
-      additionalProperties: true,
+
+      additionalProperties: false,
     },
   },
+
   [COLLECTION_NAMES.orders]: {
     $jsonSchema: {
       bsonType: "object",
+
       required: ["userId", "status", "items", "totalPrice", "createdAt", "updatedAt"],
+
       properties: {
-        userId: { bsonType: "string", minLength: 1 },
-        status: { bsonType: "string", minLength: 1 },
+        userId: { bsonType: "objectId" },
+
+        status: {
+          enum: ["created", "paid", "shipped", "delivered", "cancelled"],
+        },
+
         items: {
           bsonType: "array",
           minItems: 1,
+
           items: {
             bsonType: "object",
+
             required: [
               "productId",
               "variantId",
@@ -114,54 +189,105 @@ const COLLECTION_VALIDATORS = {
               "unitPrice",
               "lineTotal",
             ],
+
             properties: {
-              productId: { bsonType: "string", minLength: 1 },
+              productId: { bsonType: "objectId" },
+
               variantId: { bsonType: "string", minLength: 1 },
+
               productTitle: { bsonType: "string", minLength: 1 },
-              quantity: { bsonType: ["int", "long"], minimum: 1 },
-              unitPrice: { bsonType: ["double", "int", "long", "decimal"], minimum: 0 },
-              lineTotal: { bsonType: ["double", "int", "long", "decimal"], minimum: 0 },
+
+              quantity: {
+                bsonType: ["int", "long"],
+                minimum: 1,
+              },
+
+              unitPrice: {
+                bsonType: NUMBER_TYPES,
+                minimum: 0,
+              },
+
+              lineTotal: {
+                bsonType: NUMBER_TYPES,
+                minimum: 0,
+              },
+
               variant: {
                 bsonType: "object",
                 required: ["size", "style", "color"],
+
                 properties: {
                   size: { bsonType: "string" },
                   style: { bsonType: "string" },
                   color: { bsonType: "string" },
                 },
+
                 additionalProperties: false,
               },
             },
+
             additionalProperties: false,
           },
         },
-        totalPrice: { bsonType: ["double", "int", "long", "decimal"], minimum: 0 },
+
+        totalPrice: {
+          bsonType: NUMBER_TYPES,
+          minimum: 0,
+        },
+
         createdAt: { bsonType: "date" },
         updatedAt: { bsonType: "date" },
       },
-      additionalProperties: true,
+
+      additionalProperties: false,
     },
   },
+
   [COLLECTION_NAMES.refreshTokens]: {
     $jsonSchema: {
       bsonType: "object",
-      required: ["jti", "userId", "familyId", "tokenHash", "expiresAt"],
+
+      required: [
+        "jti",
+        "userId",
+        "familyId",
+        "tokenHash",
+        "expiresAt",
+        "createdAt",
+        "updatedAt",
+      ],
+
       properties: {
         jti: { bsonType: "string", minLength: 10 },
-        userId: { bsonType: "string", minLength: 1 },
-        familyId: { bsonType: "string", minLength: 1 },
+
+        userId: { bsonType: "objectId" },
+
+        familyId: { bsonType: "string", minLength: 10 },
+
         tokenHash: { bsonType: "string", minLength: 20 },
+
         rotatedTo: { bsonType: ["string", "null"] },
-        revokedAt: { bsonType: ["string", "null"] },
-        keyVersion: { bsonType: "string" },
+
+        revokedAt: { bsonType: ["date", "null"] },
+
+        keyVersion: {
+          enum: ["v1"],
+        },
+
         ip: { bsonType: ["string", "null"] },
+
         userAgent: { bsonType: ["string", "null"] },
+
         reason: { bsonType: ["string", "null"] },
+
         createdAt: { bsonType: "date" },
+
         expiresAt: { bsonType: "date" },
+
         updatedAt: { bsonType: "date" },
       },
-      additionalProperties: true,
+
+      additionalProperties: false,
     },
   },
 };

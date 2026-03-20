@@ -208,7 +208,7 @@ function buildMongoOrderRepository(collections, client) {
         const lineTotal = toMoney(unitPrice * quantity);
 
         persistedItems.push({
-          productId: product._id.toString(),
+          productId: product._id,
           variantId: variant.id,
           productTitle: product.title,
           quantity: new Int32(quantity),
@@ -250,11 +250,18 @@ function buildMongoOrderRepository(collections, client) {
   }
 
   async function createOrder({ userId, items }) {
+    const userObjectId = toObjectIdOrNull(userId);
+    if (!userObjectId) {
+      throw new OrderDomainError("MALFORMED_REQUEST", "Invalid userId", 400, {
+        userId,
+      });
+    }
+
     let createdOrder;
 
     try {
       createdOrder = await withRetryableTransaction(client, async (session) =>
-        processOrderCreation({ userId, items, session })
+        processOrderCreation({ userId: userObjectId, items, session })
       );
     } catch (error) {
       // Fallback for local / non-replica Mongo setups.
@@ -262,7 +269,11 @@ function buildMongoOrderRepository(collections, client) {
         throw error;
       }
 
-      createdOrder = await processOrderCreation({ userId, items, session: null });
+      createdOrder = await processOrderCreation({
+        userId: userObjectId,
+        items,
+        session: null,
+      });
     }
 
     return toOrderDto(createdOrder);

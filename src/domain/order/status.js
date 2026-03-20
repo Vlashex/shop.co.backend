@@ -1,8 +1,9 @@
 const ORDER_STATUS = {
   CREATED: "created",
   PAID: "paid",
-  FULFILLED: "fulfilled",
-  CANCELED: "canceled",
+  SHIPPED: "shipped",
+  DELIVERED: "delivered",
+  CANCELLED: "cancelled",
 };
 
 module.exports = {
