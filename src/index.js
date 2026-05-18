@@ -7,7 +7,7 @@ const { buildAuthRoutes } = require("./adapters/http/routes/auth");
 const { buildCartRoutes } = require("./adapters/http/routes/cart");
 const { buildOrdersRoutes } = require("./adapters/http/routes/orders");
 const { buildRateLimiter } = require("./adapters/http/middlewares/rateLimit");
-const { buildMongoRepositories } = require("./app/buildMongoRepositories");
+const { buildRepositories } = require("./app/buildRepositories");
 const {
   buildProductUseCases,
 } = require("./application/use-cases/products");
@@ -287,7 +287,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 async function start() {
-  const repositories = await buildMongoRepositories();
+  const repositories = await buildRepositories();
   const hashService = buildHashService();
   const tokenService = buildTokenService();
   const refreshTokenService = buildRefreshTokenService(
